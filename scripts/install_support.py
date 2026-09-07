@@ -9,7 +9,7 @@ import shlex
 import sqlite3
 import sys
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
 
 
@@ -45,9 +45,18 @@ def validate_environment(env_file: Path, install_dir: Path) -> dict:
             **{key.lower(): value for key, value in values.items() if value is not None}
         )
     except ValidationError as exc:
-        fields = sorted({str(error["loc"][0]) if error["loc"] else "configuration"
-                         for error in exc.errors(include_input=False, include_context=False)})
-        raise InstallError("Invalid .env settings: " + ", ".join(fields) + ".") from None
+        problems = []
+        for error in exc.errors(include_input=False, include_context=False, include_url=False):
+            location = ".".join(str(part).upper() for part in error["loc"])
+            message = error["msg"].removeprefix("Value error, ")
+            # Model-level checks contain the useful requirement (password length,
+            # URL/cookie mismatch, mutually exclusive TLS settings). Preserve it,
+            # but never include inputs, exception reprs, or credential values.
+            for key, value in values.items():
+                if value and any(word in key.upper() for word in ("PASSWORD", "SECRET", "TOKEN")):
+                    message = message.replace(value, "[redacted]")
+            problems.append(f"{location}: {message}" if location else message)
+        raise InstallError("Invalid .env settings:\n  - " + "\n  - ".join(problems)) from None
 
     parsed = urlparse(settings.app_url)
     host = parsed.hostname or ""
@@ -61,10 +70,15 @@ def validate_environment(env_file: Path, install_dir: Path) -> dict:
     except ValueError:
         is_ip = False
     labels = host.split(".")
-    if (parsed.scheme != "https" or port not in (None, 443) or is_ip or len(labels) < 2
-            or len(host) > 253 or any(not re.fullmatch(
-                r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in labels)
-            or labels[-1] in {"localhost", "local", "test", "invalid", "example"}):
+    if (
+        parsed.scheme != "https"
+        or port not in (None, 443)
+        or is_ip
+        or len(labels) < 2
+        or len(host) > 253
+        or any(not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in labels)
+        or labels[-1] in {"localhost", "local", "test", "invalid", "example"}
+    ):
         raise InstallError("APP_URL must be an HTTPS public DNS hostname on port 443.")
     if not settings.session_cookie_secure:
         raise InstallError("Set SESSION_COOKIE_SECURE=true for deployment.")
@@ -79,13 +93,20 @@ def validate_environment(env_file: Path, install_dir: Path) -> dict:
         if not secret.strip() or secret.startswith("replace-"):
             raise InstallError(f"Set {name.upper()} in .env.")
     invite = urlparse(settings.discord_invite_url)
-    if (invite.username or invite.query or invite.fragment
-            or not re.fullmatch(r"/(?:invite/)?[A-Za-z0-9-]+", invite.path)
-            or "replace-me" in invite.path
-            or (invite.hostname == "discord.com" and not invite.path.startswith("/invite/"))):
+    if (
+        invite.username
+        or invite.query
+        or invite.fragment
+        or not re.fullmatch(r"/(?:invite/)?[A-Za-z0-9-]+", invite.path)
+        or "replace-me" in invite.path
+        or (invite.hostname == "discord.com" and not invite.path.startswith("/invite/"))
+    ):
         raise InstallError("Set a permanent DISCORD_INVITE_URL in .env.")
-    if (not settings.smtp_host.strip() or settings.smtp_host.endswith("example.com")
-            or not 1 <= settings.smtp_port <= 65535):
+    if (
+        not settings.smtp_host.strip()
+        or settings.smtp_host.endswith("example.com")
+        or not 1 <= settings.smtp_port <= 65535
+    ):
         raise InstallError("Set a real SMTP_HOST and valid SMTP_PORT in .env.")
     try:
         sender = validate_email(settings.smtp_from, check_deliverability=False)
@@ -104,14 +125,23 @@ def validate_environment(env_file: Path, install_dir: Path) -> dict:
         raise InstallError("The installed data directory must not be a symbolic link.")
     try:
         url = make_url(settings.database_url)
-        if url.drivername != "sqlite" or not url.database or url.database == ":memory:" or url.query:
+        if (
+            url.drivername != "sqlite"
+            or not url.database
+            or url.database == ":memory:"
+            or url.query
+        ):
             raise ValueError
         database = Path(url.database)
-        database = (target / database).resolve() if not database.is_absolute() else database.resolve()
+        database = (
+            (target / database).resolve() if not database.is_absolute() else database.resolve()
+        )
         if not database.is_relative_to(data) or database == data:
             raise ValueError
     except (ValueError, TypeError):
-        raise InstallError("DATABASE_URL must name a SQLite file inside /opt/ssu-membership/data.") from None
+        raise InstallError(
+            "DATABASE_URL must name a SQLite file inside /opt/ssu-membership/data."
+        ) from None
     if database.exists() and not database.is_file():
         raise InstallError("DATABASE_URL must name a regular file.")
     return {"hostname": host, "app_url": settings.app_url, "database": str(database)}
@@ -144,12 +174,12 @@ def caddy_root_config(original: str, root_file: Path, site_file: Path) -> str:
         except ValueError:
             continue  # caddy validate is the authoritative syntax check.
         if len(words) >= 2 and words[0] == "import":
-            pattern = Path(words[1])
-            if not pattern.is_absolute():
-                pattern = root_file.parent / pattern
-            if fnmatch.fnmatchcase(str(site_file), str(pattern)):
+            pattern = PurePosixPath(words[1])
+            if not pattern.is_absolute() and not re.match(r"^[A-Za-z]:/", str(pattern)):
+                pattern = PurePosixPath(root_file.parent.as_posix()) / pattern
+            if fnmatch.fnmatchcase(site_file.as_posix(), str(pattern)):
                 return original
-    return original.rstrip() + f"\n\n# Managed by SSU install.sh\nimport {site_file}\n"
+    return original.rstrip() + f"\n\n# Managed by SSU install.sh\nimport {site_file.as_posix()}\n"
 
 
 def main():
@@ -170,7 +200,9 @@ def main():
         if args.command == "validate":
             print(json.dumps(validate_environment(args.env, args.install_dir)))
         elif args.command == "backup":
-            print(f"Verified pre-install backup: {backup_database(args.database, args.destination)}")
+            print(
+                f"Verified pre-install backup: {backup_database(args.database, args.destination)}"
+            )
         else:
             original = args.root.read_text() if args.root.exists() else ""
             args.output.write_text(caddy_root_config(original, args.root, args.site))
@@ -179,8 +211,10 @@ def main():
         return 1
     except Exception as exc:
         # Exceptions from validators/parsers can include credential values.
-        print(f"Installer helper failed ({type(exc).__name__}); check configuration and paths.",
-              file=sys.stderr)
+        print(
+            f"Installer helper failed ({type(exc).__name__}); check configuration and paths.",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

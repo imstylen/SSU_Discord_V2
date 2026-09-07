@@ -86,42 +86,58 @@ The member follows the email link and clicks **Connect Discord & join**. Consent
 
 ## Ubuntu deployment
 
-Use Ubuntu with Python 3.12+, Caddy, and systemd. Install Python’s venv support and Caddy through your usual system package process. Point DNS for `members.ssu-apps.link` to the server and allow inbound ports 80/443 for Caddy. Port 8010 binds to loopback only.
+On a fresh **Ubuntu 26.04 LTS** server, upload the project, including your configured production `.env`, into a directory such as `~/SSU_Discord_V2`. Point your public DNS record at the server; if an AAAA record exists, it must point to working IPv6 on this server. Allow inbound TCP 80/443 in your cloud provider’s firewall/security group and register the production OAuth redirect in Discord.
 
-Place the project at `/opt/ssu-membership`, then:
+Use these production settings in the server’s `.env` (the local VS Code configuration intentionally uses different URL/cookie settings):
 
-```bash
-sudo useradd --system --home /opt/ssu-membership --shell /usr/sbin/nologin ssu-membership
-cd /opt/ssu-membership
-sudo python3 -m venv .venv
-sudo .venv/bin/python -m pip install -r requirements.lock
-sudo .venv/bin/python -m pip install --no-deps -e .
-sudo .venv/bin/python scripts/configure.py
-sudo install -d -o ssu-membership -g ssu-membership -m 700 data backups
-sudo chown root:ssu-membership .env
-sudo chmod 640 .env
+```dotenv
+APP_URL="https://members.ssu-apps.link"
+SESSION_COOKIE_SECURE=true
+DATABASE_URL="sqlite:///./data/app.db"
 ```
 
-Edit `.env` with production settings. Keep `APP_URL=https://members.ssu-apps.link`, `SESSION_COOKIE_SECURE=true`, and use `DATABASE_URL=sqlite:////opt/ssu-membership/data/app.db`. Configure the SMTP and Discord values above. Keep code and the virtual environment read-only to the service user; only `data` and `backups` need write access.
+The absolute database URL `sqlite:////opt/ssu-membership/data/app.db` also works. Database files outside the installation’s `data` directory are rejected because the supplied systemd services cannot write there. Configure real SMTP and Discord credentials as described above. `.env` must use literal values rather than `${VARIABLE}` interpolation; it is parsed as data, never sourced as a shell script or printed.
 
-Install and start the supplied units:
+From the uploaded project directory, run:
 
 ```bash
-sudo cp deploy/ssu-membership-*.service deploy/ssu-membership-backup.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now ssu-membership-web ssu-membership-bot ssu-membership-backup.timer
+sudo bash ./install.sh
 ```
 
-Add the site block from `deploy/Caddyfile` to `/etc/caddy/Caddyfile` (preserve other existing sites), then:
+For an additional or otherwise undetectable SSH port:
 
 ```bash
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy
+sudo bash ./install.sh --ssh-port 2222
+```
+
+`--ssh-port` can be repeated. The installer also discovers ports from the current SSH connection, listening sshd processes, sshd configuration, and `ssh.socket`. It adds SSH rules before enabling UFW, preserves existing rules/defaults, and stops if it cannot identify any SSH access port. It never changes SSH configuration. HTTP/HTTPS are allowed through UFW; port 8010 remains bound to loopback.
+
+The script installs Ubuntu’s Python 3.14 and build/venv tools, runtime dependencies, Caddy from its official signed APT repository, and UFW. It validates the configuration, copies code to `/opt/ssu-membership`, creates the unprivileged service account, initializes SQLite, installs/enables the web and bot services and backup timer, configures HTTPS from `APP_URL`, and runs readiness checks plus a verified backup. Code/venv remain root-owned; `.env` is root-owned and service-group-readable (640); data/backups are service-owned (700). It does not generate or overwrite your secrets, copy development databases, modify Discord or DNS, or send a test email.
+
+Caddy uses `/etc/caddy/ssu-membership.caddy`, imported once from `/etc/caddy/Caddyfile`. Other sites are preserved. Existing files at the managed site path must bear the installer’s ownership comment; unrelated content is not overwritten. Generated configuration is validated before reload, and validation/reload failures restore the previous files. Access logging remains disabled for the SSU site. An unrelated process on ports 80, 443, or 8010 stops installation rather than being terminated.
+
+### Rerunning and updating
+
+Upload the updated project and run the same command again. The installer preserves the installed `.env`, databases and backups. If separate source and installed `.env` files differ, it stops; reconcile them yourself before rerunning. Running from `/opt/ssu-membership` is also supported. For updates, using a separate upload directory lets validation and the pre-install backup finish before code is replaced.
+
+SSU services and the backup timer are stopped before code replacement. An existing database gets a consistent, integrity-checked `backups/pre-install-*.sqlite3` recovery copy; these copies are retained until you remove them. A virtual environment using a different or broken Python is kept as `.venv.pre-install.*` before creating the Python 3.14 environment. Normal daily `ssu-*.sqlite3` backups retain 30 days. No database migration or automatic application rollback is attempted. If a later installation step fails, services may remain stopped or partially started; fix the reported issue and rerun. Existing data and `.env` are preserved.
+
+### Status and troubleshooting
+
+```bash
+sudo systemctl status ssu-membership-web ssu-membership-bot caddy
+sudo systemctl list-timers ssu-membership-backup.timer
+sudo journalctl -u ssu-membership-web -u ssu-membership-bot -u caddy -n 80
 curl --fail https://members.ssu-apps.link/healthz
-sudo journalctl -u ssu-membership-web -u ssu-membership-bot --since '10 minutes ago'
 ```
 
-`/healthz` checks the web process and database, not SMTP delivery or gateway connectivity. Confirm the bot’s “connected” log and verify there are no role configuration errors. Perform a test-member smoke check: email delivery → OAuth → join → Verified → deactivate → role removed → reactivate → role restored → reset. Automated tests use mocks and do not establish production connectivity. The deployment files are supplied for your server; local implementation does not publish the application or change your Discord server.
+- **Failure during configuration validation:** read the `Installer:` message immediately above the final error. It reports the actual failed requirement, such as a short `SESSION_SECRET`, an HTTP `APP_URL`, insecure cookies on a public hostname, or conflicting SMTP TLS settings. Correct the server’s `.env` and rerun. On a fresh installation the systemd units do not exist yet at this point; missing units are expected.
+- **HTTPS not ready:** check DNS/AAAA records, cloud security groups, UFW and Caddy logs. The installer uses bounded retries, leaves installed services in place, and exits nonzero if public HTTPS never becomes healthy.
+- **Bot readiness not confirmed:** check the current bot logs, token, guild ID, Server Members Intent, Create Invite/Manage Roles permissions, and the Verified role hierarchy. A running process alone is not counted as a ready bot.
+- **Caddy validation failed:** previous configuration was restored. Check existing site definitions for a duplicate `APP_URL` hostname and validate the existing Caddyfile before rerunning.
+- **“Another SSU installation is already running”:** allow the other invocation to complete; an OS lock prevents concurrent installers.
+
+`/healthz` checks the web process/database, not SMTP delivery. After installation perform one real test-member workflow: email delivery → OAuth and automatic join → Verified → deactivate → role removed → reactivate → role restored → reset. Automated tests mock external services and cannot establish production connectivity.
 
 ## Backups and restore
 

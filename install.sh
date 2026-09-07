@@ -177,8 +177,13 @@ cleanup() {
 failed() {
     local status=$1 line=$2
     printf '[SSU] Installation stopped during %s (line %s, exit %s).\n' "$CURRENT_STEP" "$line" "$status" >&2
-    printf '[SSU] Check: systemctl status ssu-membership-web ssu-membership-bot caddy\n' >&2
-    printf '[SSU] Logs: journalctl -u ssu-membership-web -u ssu-membership-bot -u caddy -n 80\n' >&2
+    case "$CURRENT_STEP" in
+        preflight|'installing Ubuntu dependencies'|'validating configuration and Python dependencies'|'preparing service account')
+            printf '[SSU] See the Installer: or package error above. Application services have not been installed or changed in this run.\n' >&2 ;;
+        *)
+            printf '[SSU] Check: systemctl status ssu-membership-web ssu-membership-bot caddy\n' >&2
+            printf '[SSU] Logs: journalctl -u ssu-membership-web -u ssu-membership-bot -u caddy -n 80\n' >&2 ;;
+    esac
     exit "$status"
 }
 
@@ -238,7 +243,7 @@ stop_and_backup() {
 install_application() {
     if [[ "$SOURCE_DIR" != "$INSTALL_DIR" ]]; then
         rsync -r --safe-links --exclude='.env' --exclude='.env.*' --exclude='.venv*' \
-            --exclude='.git' --exclude='.vscode' --exclude='.pytest_cache' \
+            --exclude='.git' --exclude='.vscode' --exclude='.tools' --exclude='.pytest_cache' \
             --exclude='.ruff_cache' --exclude='__pycache__' --exclude='*.py[cod]' \
             --exclude='*.egg-info' --exclude='data' --exclude='backups' \
             --exclude='*.db*' --exclude='*.sqlite*' --exclude='*.log' \
