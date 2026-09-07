@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}{{ app_name }}{% endblock %} · Sunny Side Up</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="{{ '/admin' if admin else '/admin/login' }}" aria-label="Sunny Side Up home"><span class="sun" aria-hidden="true">☀</span><span>Sunny Side Up<small>COMMUNITY MEMBERSHIP</small></span></a>
+    {% if admin %}<form action="/admin/logout" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button quiet" type="submit">Log out <span aria-hidden="true">↗</span></button></form>{% else %}<span class="header-note">A little more connected.</span>{% endif %}
+  </header>
+  <main id="main">
+    {% if flash %}<div class="notice {{ flash.kind }}" role="status">{{ flash.message }}{% if flash.member_id %} <a href="/admin/members/{{ flash.member_id }}">View member</a>{% endif %}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer>Sunny Side Up <span aria-hidden="true">·</span> A place to belong.{% if admin %}<span class="footer-right">All dates in UTC</span>{% endif %}</footer>
+</body>
+</html>

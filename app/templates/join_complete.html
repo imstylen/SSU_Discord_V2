@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}You’re connected{% endblock %}
+{% block content %}
+<section class="center-card welcome-card">
+  <div class="success-icon" aria-hidden="true">✓</div>
+  <div class="eyebrow">{{ 'MAKE YOURSELF AT HOME' if in_guild else 'YOUR ACCOUNT IS CONNECTED' }}</div>
+  <h1>You’re connected!</h1>
+  <p class="lead">{{ 'You’re in the SSU Discord. Your membership is linked and your community is ready for you.' if in_guild else 'Your SSU membership is now linked to your Discord account.' }}</p>
+  <div class="connected-account"><span class="avatar" aria-hidden="true">{{ member.discord_username[0] | upper }}</span><div><strong>@{{ member.discord_username }}</strong>{% if member.discord_global_name %}<span>{{ member.discord_global_name }}</span>{% endif %}</div><span class="badge linked">Connected</span></div>
+  {% if sync_failed %}<div class="notice error" role="status">Your account is connected. Discord access is taking a little longer; our bot will retry automatically. Contact SSU if access does not appear.</div>{% endif %}
+  {% if in_guild %}
+    <a class="button primary wide" href="{{ server_url }}" rel="noreferrer">Open SSU in Discord <span aria-hidden="true">↗</span></a>
+  {% else %}
+    <div class="notice error" role="status">{% if lookup_failed %}We couldn’t confirm your server access right now.{% elif join_failed %}Discord couldn’t add you to the server automatically.{% else %}Your account is connected, but you’re not currently in the server.{% endif %} Use the invite below to join. Your membership connection is saved.</div>
+    <a class="button primary wide" href="{{ invite_url }}" rel="noreferrer">Join the SSU Discord <span aria-hidden="true">↗</span></a>
+  {% endif %}
+  <p class="fine-print">Your subscriber channels should appear shortly after joining. To change the connected account, contact SSU.</p>
+</section>
+{% endblock %}

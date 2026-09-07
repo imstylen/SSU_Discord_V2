@@ -1,0 +1,5 @@
+{% extends 'base.html' %}
+{% block title %}A little help needed{% endblock %}
+{% block content %}
+<section class="center-card"><div class="eyebrow">LET’S GET YOU CONNECTED</div><h1>A little help needed.</h1><p class="lead" role="alert">{{ message }}</p>{% if retry %}<a class="button primary wide" href="/auth/discord/start">Try connecting again</a>{% elif admin %}<a class="button primary wide" href="/admin">Back to members</a>{% endif %}<p class="fine-print">Need a hand? Contact the SSU team.</p></section>
+{% endblock %}

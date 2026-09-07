@@ -1,0 +1,23 @@
+[Unit]
+Description=SSU Discord membership bot
+After=network-online.target ssu-membership-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ssu-membership
+Group=ssu-membership
+WorkingDirectory=/opt/ssu-membership
+ExecStart=/opt/ssu-membership/.venv/bin/python -m bot.main
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ssu-membership/data
+
+[Install]
+WantedBy=multi-user.target

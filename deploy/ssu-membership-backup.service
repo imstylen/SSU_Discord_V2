@@ -1,0 +1,15 @@
+[Unit]
+Description=Consistent SSU SQLite backup
+
+[Service]
+Type=oneshot
+User=ssu-membership
+Group=ssu-membership
+WorkingDirectory=/opt/ssu-membership
+ExecStart=/opt/ssu-membership/.venv/bin/python -m app.backup --destination /opt/ssu-membership/backups --retention-days 30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ssu-membership/data /opt/ssu-membership/backups

@@ -1,0 +1,5 @@
+members.ssu-apps.link {
+    encode zstd gzip
+    # Do not enable access logs: registration URLs and OAuth codes are credentials.
+    reverse_proxy 127.0.0.1:8010
+}

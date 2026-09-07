@@ -1,0 +1,5 @@
+{% extends 'base.html' %}
+{% block title %}Reset Discord link{% endblock %}
+{% block content %}
+<section class="center-card"><div class="eyebrow">ACCOUNT CONNECTION</div><h1>Reset this Discord link?</h1><p class="lead">{{ member.email }}</p><p>This removes subscriber access from <strong>@{{ member.discord_username }}</strong>, disconnects their Discord account, and invalidates the old registration link.</p><p>A new personal registration link will be emailed to <strong>{{ member.email }}</strong>. Their membership remains {{ 'active' if member.active else 'inactive' }}.</p><form action="/admin/members/{{ member.id }}/reset-discord" method="post" class="stack"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="expected_hash" value="{{ member.invite_token_hash }}"><label class="checkbox"><input type="checkbox" name="confirm" value="reset" required> I confirm that this Discord account should be disconnected.</label><button class="button danger wide" type="submit">Reset link &amp; send new invite</button><a class="button wide" href="/admin#member-{{ member.id }}">Keep current connection</a></form></section>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block title %}Admin login{% endblock %}
+{% block content %}
+<section class="center-card">
+  <div class="eyebrow">THE COMMUNITY DESK</div>
+  <h1>Welcome back.</h1>
+  <p class="lead">Sign in to look after your SSU members.</p>
+  {% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+  <form action="/admin/login" method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="password">Admin password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required autofocus maxlength="1000">
+    <button class="button primary wide" type="submit">Sign in <span aria-hidden="true">→</span></button>
+  </form>
+  <p class="fine-print">Here to join the community? Open the personal registration link in your SSU email.</p>
+</section>
+{% endblock %}
