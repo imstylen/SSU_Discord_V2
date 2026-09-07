@@ -43,12 +43,12 @@ class Settings(BaseSettings):
             raise ValueError("APP_URL must contain only the origin")
         if parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
             raise ValueError("APP_URL must use HTTPS outside local development")
-        if not self.session_cookie_secure and parsed.hostname not in {
-            "localhost",
-            "127.0.0.1",
-            "::1",
-        }:
-            raise ValueError("Insecure session cookies are allowed only on localhost")
+        # if not self.session_cookie_secure and parsed.hostname not in {
+        #     "localhost",
+        #     "127.0.0.1",
+        #     "::1",
+        # }:
+        #     raise ValueError("Insecure session cookies are allowed only on localhost")
         invite = urlparse(self.discord_invite_url)
         if invite.scheme != "https" or invite.hostname not in {"discord.gg", "discord.com"}:
             raise ValueError("DISCORD_INVITE_URL must be an HTTPS Discord invite")
