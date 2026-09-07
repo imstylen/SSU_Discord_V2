@@ -217,6 +217,8 @@ configure_firewall
         assert sum(f"allow {port}/tcp" in line for line in lines) == 1
     assert any("allow 80/tcp" in line for line in lines)
     assert any("allow 443/tcp" in line for line in lines)
+    assert all(line.startswith("prepend allow ") for line in lines[:-1])
+    assert not any("insert" in line for line in lines)
     assert lines[-1] == "--force enable"
     assert not any("reset" in line or "delete" in line or "default" in line for line in lines)
 

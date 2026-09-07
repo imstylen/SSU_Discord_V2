@@ -142,10 +142,10 @@ configure_firewall() {
     detect_ssh_ports
     local port
     for port in "${SSH_PORTS[@]}"; do
-        ufw insert 1 allow "$port/tcp" comment 'SSU installer: preserve SSH'
+        ufw prepend allow "$port/tcp" comment 'SSU installer: preserve SSH'
     done
-    ufw insert 1 allow 80/tcp comment 'SSU HTTP and certificate validation'
-    ufw insert 1 allow 443/tcp comment 'SSU HTTPS'
+    ufw prepend allow 80/tcp comment 'SSU HTTP and certificate validation'
+    ufw prepend allow 443/tcp comment 'SSU HTTPS'
     # Never reset UFW or remove existing rules/defaults.
     ufw --force enable
 }
